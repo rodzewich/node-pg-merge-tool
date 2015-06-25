@@ -45,3 +45,6 @@ CREATE TABLE user_statuses_dictionary (
 ) WITH (
   OIDS=FALSE
 );
+
+CREATE OR REPLACE VIEW my_view AS
+ SELECT 1;

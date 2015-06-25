@@ -3,6 +3,7 @@
 var pg           = require('pg'),
     fs           = require("fs"),
     url          = require("url"),
+    colors       = require("colors"),
     structure    = null,
     tempDatabase = "temp_" + Number(new Date()).toString(32),
     hostname     = "localhost", // todo: get by options
@@ -40,8 +41,14 @@ const SQL_CREATE_DATABASE =
 const SQL_DROP_TABLE =
     "DROP TABLE IF EXISTS \"{name}\";";
 
+const SQL_CREATE_TABLE =
+    "CREATE TABLE \"{name}\" () WITH (OIDS=FALSE);";
+
 const SQL_DROP_VIEW =
     "DROP VIEW \"{name}\";";
+
+const SQL_CREATE_VIEW =
+    "CREATE OR REPLACE VIEW \"{name}\" AS {definition};";
 
 function deferred(actions) {
     function iterate() {
@@ -232,7 +239,18 @@ pg.connect(connection, function(error, client, done) {
                     }
                 });
             },
-            // drop old tables
+            function (next) {
+                client.query("BEGIN;", function(error, result) {
+                    if (!error) {
+                        next();
+                    } else {
+                        showError(error);
+                        done();
+                        client.end();
+                    }
+                });
+            },
+            // drop/create tables
             function (next) {
                 var tables = Object.keys(structure.tables);
                 var realTables = [];
@@ -259,13 +277,25 @@ pg.connect(connection, function(error, client, done) {
                         var index,
                             actions = [],
                             length = realTables.length;
-                        function addAction(table) {
+                        function addDropAction(table) {
                             actions.push(function (next) {
                                 client.query(SQL_DROP_TABLE.replace(/\{name\}/g, table), function (error) {
                                     if (error) {
                                         showError(error);
                                     } else {
-                                        console.log("DROP TABLE \"" + table + "\"");
+                                        console.log("DROP TABLE ".gray + String("\"" + table + "\"").green + ";".gray);
+                                        next();
+                                    }
+                                });
+                            });
+                        }
+                        function addCreateAction(table) {
+                            actions.push(function (next) {
+                                client.query(SQL_CREATE_TABLE.replace(/\{name\}/g, table), function (error) {
+                                    if (error) {
+                                        showError(error);
+                                    } else {
+                                        console.log("CREATE TABLE ".gray + String("\"" + table + "\"").green + ";".gray);
                                         next();
                                     }
                                 });
@@ -273,7 +303,13 @@ pg.connect(connection, function(error, client, done) {
                         }
                         for (index = 0; index < length; index += 1) {
                             if (tables.indexOf(realTables[index]) === -1) {
-                                addAction(realTables[index]);
+                                addDropAction(realTables[index]);
+                            }
+                        }
+                        length = tables.length;
+                        for (index = 0; index < length; index += 1) {
+                            if (realTables.indexOf(tables[index]) === -1) {
+                                addCreateAction(tables[index]);
                             }
                         }
                         actions.push(function () {
@@ -286,9 +322,9 @@ pg.connect(connection, function(error, client, done) {
                     }
                 ]);
             },
-            // drop old views
+            // drop/create views
             function (next) {
-                var tables = Object.keys(structure.views);
+                var views = Object.keys(structure.views);
                 var realViews = [];
                 deferred([
                     function (next) {
@@ -313,21 +349,40 @@ pg.connect(connection, function(error, client, done) {
                         var index,
                             actions = [],
                             length = realViews.length;
-                        function addAction(view) {
+                        function addDropAction(view) {
                             actions.push(function (next) {
                                 client.query(SQL_DROP_VIEW.replace(/\{name\}/g, view), function (error) {
                                     if (error) {
                                         showError(error);
                                     } else {
-                                        console.log("DROP VIEW \"" + view + "\"");
+                                        console.log("DROP VIEW ".gray + String("\"" + view + "\"").green + ";".gray);
                                         next();
                                     }
                                 });
                             });
                         }
+                        function addCreateAction(view, definition) {
+                            var query = SQL_CREATE_VIEW.
+                                replace(/\{name\}/g, view).
+                                replace(/\{definition\}/g, definition);
+                            client.query(query, function (error) {
+                                if (error) {
+                                    showError(error);
+                                } else {
+                                    console.log("CREATE VIEW ".gray + String("\"" + view + "\"").green + ";".gray);
+                                    next();
+                                }
+                            });
+                        }
                         for (index = 0; index < length; index += 1) {
-                            if (tables.indexOf(realViews[index]) === -1) {
-                                addAction(realViews[index]);
+                            if (views.indexOf(realViews[index]) === -1) {
+                                addDropAction(realViews[index]);
+                            }
+                        }
+                        length = views.length;
+                        for (index = 0; index < length; index += 1) {
+                            if (realViews.indexOf(views[index]) === -1) {
+                                addCreateAction(views[index], structure.views[views[index]]);
                             }
                         }
                         actions.push(function () {
@@ -339,6 +394,17 @@ pg.connect(connection, function(error, client, done) {
                         next();
                     }
                 ]);
+            },
+            function (next) {
+                client.query("COMMIT;", function(error, result) {
+                    if (!error) {
+                        next();
+                    } else {
+                        showError(error);
+                        done();
+                        client.end();
+                    }
+                });
             },
             function (next) {
                 var query = SQL_DROP_DATABASE.replace(/\{name\}/g, tempDatabase);
