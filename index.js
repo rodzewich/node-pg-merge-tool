@@ -37,6 +37,12 @@ const SQL_DROP_DATABASE =
 const SQL_CREATE_DATABASE =
     "CREATE DATABASE \"{database}\";";
 
+const SQL_DROP_TABLE =
+    "DROP TABLE IF EXISTS \"{table}\";";
+
+const SQL_DROP_VIEW =
+    "DROP VIEW \"{view}\";";
+
 function deferred(actions) {
     function iterate() {
         setTimeout(function () {
@@ -206,6 +212,7 @@ pg.connect(connection, function(error, client, done) {
                     }
                 });
             },
+            // load dump structure
             function (next) {
                 loadDumpStructure({
                     hostname: "localhost",
@@ -224,6 +231,114 @@ pg.connect(connection, function(error, client, done) {
                         client.end();
                     }
                 });
+            },
+            // drop old tables
+            function (next) {
+                var tables = Object.keys(structure.tables);
+                var realTables = [];
+                deferred([
+                    function (next) {
+                        client.query(SQL_SELECT_ALL_TABLES, function (error, result) {
+                            if (!error) {
+                                var index,
+                                    length = result.rows.length,
+                                    table;
+                                for (index = 0; index < length; index += 1) {
+                                    table = result.rows[index].tablename;
+                                    if (realTables.indexOf(table) === -1) {
+                                        realTables.push(table);
+                                    }
+                                }
+                                next();
+                            } else {
+                                showError(error);
+                            }
+                        });
+                    },
+                    function (next) {
+                        var index,
+                            actions = [],
+                            length = realTables.length;
+                        function addAction(table) {
+                            actions.push(function (next) {
+                                client.query(SQL_DROP_TABLE.replace(/\{table\}/g, table), function (error) {
+                                    if (error) {
+                                        showError(error);
+                                    } else {
+                                        console.log("DROP TABLE \"" + table + "\"");
+                                        next();
+                                    }
+                                });
+                            });
+                        }
+                        for (index = 0; index < length; index += 1) {
+                            if (tables.indexOf(realTables[index]) === -1) {
+                                addAction(realTables[index]);
+                            }
+                        }
+                        actions.push(function () {
+                            next();
+                        });
+                        deferred(actions);
+                    },
+                    function () {
+                        next();
+                    }
+                ]);
+            },
+            // drop old views
+            function (next) {
+                var tables = Object.keys(structure.views);
+                var realViews = [];
+                deferred([
+                    function (next) {
+                        client.query(SQL_SELECT_ALL_VIEWS, function (error, result) {
+                            if (!error) {
+                                var index,
+                                    length = result.rows.length,
+                                    view;
+                                for (index = 0; index < length; index += 1) {
+                                    view = result.rows[index].viewname;
+                                    if (realViews.indexOf(view) === -1) {
+                                        realViews.push(view);
+                                    }
+                                }
+                                next();
+                            } else {
+                                showError(error);
+                            }
+                        });
+                    },
+                    function (next) {
+                        var index,
+                            actions = [],
+                            length = realViews.length;
+                        function addAction(view) {
+                            actions.push(function (next) {
+                                client.query(SQL_DROP_VIEW.replace(/\{view\}/g, view), function (error) {
+                                    if (error) {
+                                        showError(error);
+                                    } else {
+                                        console.log("DROP VIEW \"" + view + "\"");
+                                        next();
+                                    }
+                                });
+                            });
+                        }
+                        for (index = 0; index < length; index += 1) {
+                            if (tables.indexOf(realViews[index]) === -1) {
+                                addAction(realViews[index]);
+                            }
+                        }
+                        actions.push(function () {
+                            next();
+                        });
+                        deferred(actions);
+                    },
+                    function () {
+                        next();
+                    }
+                ]);
             },
             function (next) {
                 var query = SQL_DROP_DATABASE.replace(/\{database\}/g, tempDatabase);
