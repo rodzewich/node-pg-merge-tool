@@ -1,11 +1,43 @@
-var pg       = require('pg'),
-    exists   = false, // todo: remove
-    fs       = require("fs"),
-    url      = require("url"),
-    database = "temp_" + Number(new Date()).toString(32);
+"use strict";
+
+var pg           = require('pg'),
+    fs           = require("fs"),
+    url          = require("url"),
+    structure    = null,
+    tempDatabase = "temp_" + Number(new Date()).toString(32),
+    hostname     = "localhost", // todo: get by options
+    port         = "5432",      // todo: get by options
+    login        = "postgres",  // todo: get by options
+    password     = "postgres",  // todo: get by options
+    database     = "place_1",   // todo: get by options
+    connection   = url.format({
+        protocol: "postgres",
+        slashes:  true,
+        hostname: hostname,
+        port:     port,
+        auth:     [login, password].join(":"),
+        pathname: database
+    });
+
+const SQL_SELECT_ALL_DATABASES =
+    "SELECT datname AS database    \n" +
+    "  FROM pg_database            \n" +
+    " WHERE datistemplate = false  \n" +
+    "   AND datname = '{database}';\n";
+
+const SQL_SELECT_ALL_TABLES =
+    "SELECT tablename FROM pg_tables WHERE schemaname = 'public';";
+
+const SQL_SELECT_ALL_VIEWS =
+    "SELECT viewname, definition FROM pg_views WHERE schemaname = 'public';";
+
+const SQL_DROP_DATABASE =
+    "DROP DATABASE IF EXISTS \"{database}\";";
+
+const SQL_CREATE_DATABASE =
+    "CREATE DATABASE \"{database}\";";
 
 function deferred(actions) {
-    "use strict";
     function iterate() {
         setTimeout(function () {
             var action = actions.shift();
@@ -85,7 +117,7 @@ function loadDumpStructure(options, callback) {
                 deferred(actions);
             },
             function (next) {
-                client.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public';", function (error, result) {
+                client.query(SQL_SELECT_ALL_TABLES, function (error, result) {
                     if (error) {
                         callback(error, null);
                     } else {
@@ -100,7 +132,7 @@ function loadDumpStructure(options, callback) {
                 });
             },
             function (next) {
-                client.query("SELECT viewname, definition FROM pg_views WHERE schemaname = 'public';", function (error, result) {
+                client.query(SQL_SELECT_ALL_VIEWS, function (error, result) {
                     if (error) {
                         callback(error, null);
                     } else {
@@ -123,71 +155,97 @@ function loadDumpStructure(options, callback) {
     });
 }
 
+function showError(error) {
+    console.log(error.message);
+    // exit 1
+}
 
-pg.connect("postgres://postgres:postgres@localhost/place_1", function(error, client, done) {
-
-    if (error) {
-        return console.error('error fetching client from pool', err);
-    }
-
-    deferred([
-        function (next) {
-            client.query("SELECT datname AS database FROM pg_database WHERE datistemplate = false AND datname = '" + database + "';", function(err, result) {
-                if (err) {
-                    return console.error('error running query', err);
-                }
-                exists = result.rowCount !== 0;
-                next();
-            });
-        },
-        function (next) {
-            if (exists) {
-                client.query("DROP DATABASE IF EXISTS " + database + ";", function (error) {
-                    if (error) {
-                        return console.error('error running query', error);
+pg.connect(connection, function(error, client, done) {
+    var exists = false;
+    if (!error) {
+        deferred([
+            function (next) {
+                var query = SQL_SELECT_ALL_DATABASES.replace(/\{database\}/g, tempDatabase);
+                client.query(query, function(error, result) {
+                    if (!error) {
+                        exists = result.rowCount !== 0;
+                        next();
+                    } else {
+                        showError(error);
+                        done();
+                        client.end();
                     }
-                    next();
                 });
-            } else {
-                next();
+            },
+            function (next) {
+                var query;
+                if (exists) {
+                    query = SQL_DROP_DATABASE.replace(/\{database\}/g, tempDatabase);
+                    client.query(query, function (error) {
+                        if (!error) {
+                            next();
+                        } else {
+                            showError(error);
+                            done();
+                            client.end();
+                        }
+                    });
+                } else {
+                    next();
+                }
+            },
+            function (next) {
+                var query = SQL_CREATE_DATABASE.replace(/\{database\}/g, tempDatabase);
+                client.query(query, function (error) {
+                    if (!error) {
+                        next();
+                    } else {
+                        showError(error);
+                        done();
+                        client.end();
+                    }
+                });
+            },
+            function (next) {
+                loadDumpStructure({
+                    hostname: "localhost",
+                    port:     5432,
+                    login:    "postgres",
+                    password: "postgres",
+                    database: tempDatabase,
+                    files:    ["dump.sql"]
+                }, function (error, result) {
+                    if (!error) {
+                        structure = result;
+                        next();
+                    } else {
+                        showError(error);
+                        done();
+                        client.end();
+                    }
+                });
+            },
+            function (next) {
+                var query = SQL_DROP_DATABASE.replace(/\{database\}/g, tempDatabase);
+                client.query(query, function (error) {
+                    if (!error) {
+                        next();
+                    } else {
+                        showError(error);
+                        done();
+                        client.end();
+                    }
+                });
+            },
+            function () {
+                done();
+                client.end();
             }
-        },
-        function (next) {
-            client.query("CREATE DATABASE " + database + ";", function (error) {
-                if (error) {
-                    return console.error('error running query', error);
-                }
-                next();
-            });
-        },
-        function (next) {
-            loadDumpStructure({
-                hostname: "localhost",
-                port:     5432,
-                login:    "postgres",
-                password: "postgres",
-                database: database,
-                files:    ["dump.sql"]
-            }, function (error, structure) {
-                if (error) {
-                    return console.error('error running query', error);
-                }
-                next();
-            });
-        },
-        function (next) {
-            client.query("DROP DATABASE IF EXISTS " + database + ";", function (error) {
-                if (error) {
-                    return console.error('error running query', error);
-                }
-                next();
-            });
-        },
-        function () {
-            done();
-            client.end();
-        }
-    ]);
-
+        ]);
+    } else {
+        showError(error);
+        done();
+        client.end();
+    }
 });
 
