@@ -1,7 +1,8 @@
-var pg = require('pg');
-var database = "temp" + String(Number(new Date()));
-var exists = false;
-var spawn    = require("child_process").spawn;
+var pg       = require('pg'),
+    exists   = false, // todo: remove
+    fs       = require("fs"),
+    url      = require("url"),
+    database = "temp_" + Number(new Date()).toString(32);
 
 function deferred(actions) {
     "use strict";
@@ -14,6 +15,111 @@ function deferred(actions) {
         }, 0);
     }
     iterate();
+}
+
+/**
+ * @public
+ * @function
+ * @name loadDumpStructure
+ * @param {object} options
+ * @param {string} [options.hostname]
+ * @param {number} [options.port]
+ * @param {string} [options.login]
+ * @param {string} [options.password]
+ * @param {string} options.database
+ * @param {string[]} options.files
+ * @param callback
+ */
+function loadDumpStructure(options, callback) {
+    var hostname   = options.hostname || "localhost",
+        port       = options.port || 5432,
+        login      = options.login || "postgres",
+        password   = options.password || "postgres",
+        database   = options.database,
+        files      = options.files,
+        connection = url.format({
+            protocol: "postgres",
+            slashes:  true,
+            hostname: hostname,
+            port:     port,
+            auth:     [login, password].join(":"),
+            pathname: database
+        });
+    pg.connect(url.format(connection), function (error, client, done) {
+        var query,
+            views,
+            tables;
+        deferred([
+            function (next) {
+                var actions = [],
+                    length = files.length,
+                    index;
+                function addActions(filename) {
+                    actions.push(function (next) {
+                        fs.readFile(filename, function (error, content) {
+                            if (error) {
+                                callback(error, null);
+                            } else {
+                                query = content.toString("utf8");
+                                next();
+                            }
+                        });
+                    });
+                    actions.push(function (next) {
+                        client.query(query, function (error) {
+                            if (error) {
+                                callback(error, null);
+                            } else {
+                                next();
+                            }
+                        });
+                    });
+                }
+                for (index = 0; index < length; index += 1) {
+                    addActions(files[index]);
+                }
+                actions.push(function () {
+                    next();
+                });
+                deferred(actions);
+            },
+            function (next) {
+                client.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public';", function (error, result) {
+                    if (error) {
+                        callback(error, null);
+                    } else {
+                        tables = {};
+                        result.rows.forEach(function (row) {
+                            if (!tables[row.tablename]) {
+                                tables[row.tablename] = "structure";
+                            }
+                        });
+                        next();
+                    }
+                });
+            },
+            function (next) {
+                client.query("SELECT viewname, definition FROM pg_views WHERE schemaname = 'public';", function (error, result) {
+                    if (error) {
+                        callback(error, null);
+                    } else {
+                        views = {};
+                        result.rows.forEach(function (row) {
+                            if (!views[row.viewname]) {
+                                views[row.viewname] = row.definition;
+                            }
+                        });
+                        next();
+                    }
+                });
+            },
+            function () {
+                done();
+                client.end();
+                callback(null, {tables: tables, views: views});
+            }
+        ]);
+    });
 }
 
 
@@ -53,31 +159,34 @@ pg.connect("postgres://postgres:postgres@localhost/place_1", function(error, cli
                 next();
             });
         },
+        function (next) {
+            loadDumpStructure({
+                hostname: "localhost",
+                port:     5432,
+                login:    "postgres",
+                password: "postgres",
+                database: database,
+                files:    ["dump.sql"]
+            }, function (error, structure) {
+                if (error) {
+                    return console.error('error running query', error);
+                }
+                next();
+            });
+        },
+        function (next) {
+            client.query("DROP DATABASE IF EXISTS " + database + ";", function (error) {
+                if (error) {
+                    return console.error('error running query', error);
+                }
+                next();
+            });
+        },
         function () {
-            console.log("dumping");
-            var process = spawn("node", ["./dump.js", "localhost", "5432", "postgres", "postgres", database, "dump.sql"]);
-            process.stdout.on("data", function (data) {
-                console.log(data.toString("utf8"));
-            });
-            process.stderr.on("data", function (data) {
-                console.log(data.toString("utf8"));
-            });
-            process.on("close", function (code) {
-                console.log("dump created");
-            });
+            done();
+            client.end();
         }
     ]);
-
-    /*client.query('SELECT $1::int AS number', ['1'], function(err, result) {
-
-        done();
-
-        if(err) {
-            return console.error('error running query', err);
-        }
-        console.log(result.rows[0].number);
-        //output: 1
-    });*/
 
 });
 
