@@ -32,7 +32,7 @@ CREATE TABLE users3 (
 
 CREATE TABLE countries_dictionary (
   id INTEGER,
-  name STRING,
+  name INTEGER,
   CONSTRAINT "countries_dictionary_id_primary" PRIMARY KEY (id)
 ) WITH (
   OIDS=FALSE
@@ -40,7 +40,7 @@ CREATE TABLE countries_dictionary (
 
 CREATE TABLE user_statuses_dictionary (
   id INTEGER,
-  name STRING,
+  name INTEGER,
   CONSTRAINT "user_statuses_dictionary_id_primary" PRIMARY KEY (id)
 ) WITH (
   OIDS=FALSE
