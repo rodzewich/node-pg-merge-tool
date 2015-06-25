@@ -28,7 +28,8 @@ function deferred(actions) {
  * @param {string} [options.password]
  * @param {string} options.database
  * @param {string[]} options.files
- * @param callback
+ * @param {function} callback
+ * @return {void}
  */
 function loadDumpStructure(options, callback) {
     var hostname   = options.hostname || "localhost",
