@@ -23,7 +23,7 @@ const SQL_SELECT_ALL_DATABASES =
     "SELECT datname AS database    \n" +
     "  FROM pg_database            \n" +
     " WHERE datistemplate = false  \n" +
-    "   AND datname = '{database}';\n";
+    "   AND datname = '{name}';\n";
 
 const SQL_SELECT_ALL_TABLES =
     "SELECT tablename FROM pg_tables WHERE schemaname = 'public';";
@@ -32,16 +32,16 @@ const SQL_SELECT_ALL_VIEWS =
     "SELECT viewname, definition FROM pg_views WHERE schemaname = 'public';";
 
 const SQL_DROP_DATABASE =
-    "DROP DATABASE IF EXISTS \"{database}\";";
+    "DROP DATABASE IF EXISTS \"{name}\";";
 
 const SQL_CREATE_DATABASE =
-    "CREATE DATABASE \"{database}\";";
+    "CREATE DATABASE \"{name}\";";
 
 const SQL_DROP_TABLE =
-    "DROP TABLE IF EXISTS \"{table}\";";
+    "DROP TABLE IF EXISTS \"{name}\";";
 
 const SQL_DROP_VIEW =
-    "DROP VIEW \"{view}\";";
+    "DROP VIEW \"{name}\";";
 
 function deferred(actions) {
     function iterate() {
@@ -171,7 +171,7 @@ pg.connect(connection, function(error, client, done) {
     if (!error) {
         deferred([
             function (next) {
-                var query = SQL_SELECT_ALL_DATABASES.replace(/\{database\}/g, tempDatabase);
+                var query = SQL_SELECT_ALL_DATABASES.replace(/\{name\}/g, tempDatabase);
                 client.query(query, function(error, result) {
                     if (!error) {
                         exists = result.rowCount !== 0;
@@ -186,7 +186,7 @@ pg.connect(connection, function(error, client, done) {
             function (next) {
                 var query;
                 if (exists) {
-                    query = SQL_DROP_DATABASE.replace(/\{database\}/g, tempDatabase);
+                    query = SQL_DROP_DATABASE.replace(/\{name\}/g, tempDatabase);
                     client.query(query, function (error) {
                         if (!error) {
                             next();
@@ -201,7 +201,7 @@ pg.connect(connection, function(error, client, done) {
                 }
             },
             function (next) {
-                var query = SQL_CREATE_DATABASE.replace(/\{database\}/g, tempDatabase);
+                var query = SQL_CREATE_DATABASE.replace(/\{name\}/g, tempDatabase);
                 client.query(query, function (error) {
                     if (!error) {
                         next();
@@ -261,7 +261,7 @@ pg.connect(connection, function(error, client, done) {
                             length = realTables.length;
                         function addAction(table) {
                             actions.push(function (next) {
-                                client.query(SQL_DROP_TABLE.replace(/\{table\}/g, table), function (error) {
+                                client.query(SQL_DROP_TABLE.replace(/\{name\}/g, table), function (error) {
                                     if (error) {
                                         showError(error);
                                     } else {
@@ -315,7 +315,7 @@ pg.connect(connection, function(error, client, done) {
                             length = realViews.length;
                         function addAction(view) {
                             actions.push(function (next) {
-                                client.query(SQL_DROP_VIEW.replace(/\{view\}/g, view), function (error) {
+                                client.query(SQL_DROP_VIEW.replace(/\{name\}/g, view), function (error) {
                                     if (error) {
                                         showError(error);
                                     } else {
@@ -341,7 +341,7 @@ pg.connect(connection, function(error, client, done) {
                 ]);
             },
             function (next) {
-                var query = SQL_DROP_DATABASE.replace(/\{database\}/g, tempDatabase);
+                var query = SQL_DROP_DATABASE.replace(/\{name\}/g, tempDatabase);
                 client.query(query, function (error) {
                     if (!error) {
                         next();
