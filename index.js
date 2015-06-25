@@ -175,6 +175,27 @@ function showError(error) {
 
 pg.connect(connection, function(error, client, done) {
     var exists = false;
+
+    function query(query, options, callback) {
+        var temp = String(query),
+            colors = temp,
+            property;
+        if (options) {
+            for (property in options) {
+                if (options.hasOwnProperty(property)) {
+                    temp = temp.replace(new RegExp("\\{" + property + "\\}", "g"), options[property]);
+                    colors = colors.replace(new RegExp("\\{" + property + "\\}", "g"), String(options[property]).green);
+                }
+            }
+        }
+        client.query(temp, function () {
+            console.log(colors.gray);
+            if (typeof callback === "function") {
+                callback.apply(null, arguments);
+            }
+        });
+    }
+
     if (!error) {
         deferred([
             function (next) {
@@ -256,7 +277,7 @@ pg.connect(connection, function(error, client, done) {
                 var realTables = [];
                 deferred([
                     function (next) {
-                        client.query(SQL_SELECT_ALL_TABLES, function (error, result) {
+                        query(SQL_SELECT_ALL_TABLES, null, function (error, result) {
                             if (!error) {
                                 var index,
                                     length = result.rows.length,
@@ -279,7 +300,7 @@ pg.connect(connection, function(error, client, done) {
                             length = realTables.length;
                         function addDropAction(table) {
                             actions.push(function (next) {
-                                client.query(SQL_DROP_TABLE.replace(/\{name\}/g, table), function (error) {
+                                query(SQL_DROP_TABLE, {name: table}, function (error) {
                                     if (error) {
                                         showError(error);
                                     } else {
@@ -291,7 +312,7 @@ pg.connect(connection, function(error, client, done) {
                         }
                         function addCreateAction(table) {
                             actions.push(function (next) {
-                                client.query(SQL_CREATE_TABLE.replace(/\{name\}/g, table), function (error) {
+                                query(SQL_CREATE_TABLE, {name: table}, function (error) {
                                     if (error) {
                                         showError(error);
                                     } else {
