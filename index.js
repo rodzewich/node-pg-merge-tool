@@ -4,6 +4,7 @@ var pg           = require('pg'),
     fs           = require("fs"),
     url          = require("url"),
     colors       = require("colors"),
+    queries      = {},
     structure    = null,
     tempDatabase = "temp_" + Number(new Date()).toString(32),
     hostname     = "localhost", // todo: get by options
@@ -19,6 +20,22 @@ var pg           = require('pg'),
         auth:     [login, password].join(":"),
         pathname: database
     });
+
+deferred([
+
+    function (next) {
+        fs.readFile("queries/GetAllSchemes.sql", function (error, content) {
+            if (!error) {
+                showError(error);
+                next();
+            } else {
+                queries.GET_ALL_SCHEMES = content.toString("utf8");
+            }
+        });
+    }
+
+]);
+
 
 const SQL_SELECT_ALL_DATABASES =
     "SELECT datname AS database    \n" +
