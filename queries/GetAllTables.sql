@@ -51,8 +51,14 @@ SELECT rel.relname,
 , (CASE WHEN rel.reltoastrelid = 0 THEN FALSE ELSE TRUE END) AS hastoasttable
 , rel.reloftype, typ.typname
 ,
-(SELECT array_agg(label) FROM pg_seclabels sl1 WHERE sl1.objoid=rel.oid AND sl1.objsubid=0) AS labels,
-(SELECT array_agg(provider) FROM pg_seclabels sl2 WHERE sl2.objoid=rel.oid AND sl2.objsubid=0) AS providers  FROM pg_class rel
+    (SELECT array_agg(s1.label)
+       FROM pg_seclabels s1
+      WHERE s1.objoid=rel.oid AND s1.objsubid=0) AS labels,
+    (SELECT array_agg(s2.provider)
+       FROM pg_seclabels s2
+      WHERE s2.objoid=rel.oid
+        AND s2.objsubid=0) AS providers
+  FROM pg_class rel
   LEFT OUTER JOIN pg_tablespace spc
     ON spc.oid=rel.reltablespace
   LEFT OUTER JOIN pg_description des
