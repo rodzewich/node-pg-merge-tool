@@ -4,10 +4,10 @@ SELECT n.nspname,
        d.description,
        (SELECT array_agg(s1.label)
           FROM pg_seclabels s1
-         WHERE s1.objoid=n.oid) AS labels,
+         WHERE s1.objoid = n.oid) AS labels,
        (SELECT array_agg(s2.provider)
           FROM pg_seclabels s2
-         WHERE s2.objoid=n.oid) AS providers
+         WHERE s2.objoid = n.oid) AS providers
   FROM pg_namespace n
   LEFT OUTER JOIN pg_description d
     ON d.objoid=n.oid
