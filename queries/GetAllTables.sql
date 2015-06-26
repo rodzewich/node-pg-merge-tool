@@ -11,12 +11,20 @@ SELECT rel.relname,
        des.description,
        con.conname,
        con.conkey,
-       EXISTS(select 1 FROM pg_trigger
-                       JOIN pg_proc pt ON pt.oid=tgfoid AND pt.proname='logtrigger'
-                       JOIN pg_proc pc ON pc.pronamespace=pt.pronamespace AND pc.proname='slonyversion'
-                     WHERE tgrelid=rel.oid) AS isrepl,
-       (SELECT COUNT(*) FROM pg_trigger
-                     WHERE tgrelid=rel.oid AND tgisinternal = FALSE) AS triggercount
+       EXISTS(
+           SELECT 1 FROM pg_trigger
+             JOIN pg_proc pt
+               ON pt.oid=tgfoid
+              AND pt.proname='logtrigger'
+             JOIN pg_proc pc
+               ON pc.pronamespace=pt.pronamespace
+              AND pc.proname='slonyversion'
+            WHERE tgrelid=rel.oid
+       ) AS isrepl,
+       (SELECT COUNT(*)
+          FROM pg_trigger
+         WHERE tgrelid=rel.oid
+           AND tgisinternal = FALSE) AS triggercount
 , rel.relpersistence
 , substring(array_to_string(rel.reloptions, ',') FROM 'fillfactor=([0-9]*)') AS fillfactor
 , substring(array_to_string(rel.reloptions, ',') FROM 'autovacuum_enabled=([a-z|0-9]*)') AS autovacuum_enabled

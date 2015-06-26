@@ -21,20 +21,36 @@ var pg           = require('pg'),
         pathname: database
     });
 
-deferred([
-
-    function (next) {
-        fs.readFile("queries/GetAllSchemes.sql", function (error, content) {
-            if (!error) {
-                showError(error);
-                next();
-            } else {
-                queries.GET_ALL_SCHEMES = content.toString("utf8");
+function loadQueries(callback) {
+    deferred([
+        function (next) {
+            fs.readFile("queries/GetAllSchemes.sql", function (error, content) {
+                if (!error) {
+                    showError(error);
+                    next();
+                } else {
+                    queries.GET_ALL_SCHEMES = content.toString("utf8");
+                }
+            });
+        },
+        function (next) {
+            fs.readFile("queries/GetAllTables.sql", function (error, content) {
+                if (!error) {
+                    showError(error);
+                    next();
+                } else {
+                    queries.GET_ALL_TABLES = content.toString("utf8");
+                }
+            });
+        },
+        function () {
+            if (typeof callback === "function") {
+                callback();
             }
-        });
-    }
+        }
+    ]);
+}
 
-]);
 
 
 const SQL_SELECT_ALL_DATABASES =
