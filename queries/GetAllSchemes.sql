@@ -1,7 +1,8 @@
 -- get all schemes
 
-SELECT n.nspname,
-       d.description,
+SELECT n.oid                      AS id,
+       n.nspname                  AS name,
+       d.description              AS description,
        (SELECT array_agg(s1.label)
           FROM pg_seclabels s1
          WHERE s1.objoid = n.oid) AS labels,

@@ -4,7 +4,6 @@ var pg           = require('pg'),
     fs           = require("fs"),
     url          = require("url"),
     colors       = require("colors"),
-    queries      = {},
     structure    = null,
     tempDatabase = "temp_" + Number(new Date()).toString(32),
     hostname     = "localhost", // todo: get by options
@@ -22,30 +21,39 @@ var pg           = require('pg'),
     });
 
 function loadQueries(callback) {
+    var queries = {};
     deferred([
         function (next) {
-            fs.readFile("queries/GetAllSchemes.sql", function (error, content) {
-                if (!error) {
-                    showError(error);
-                    next();
-                } else {
-                    queries.GET_ALL_SCHEMES = content.toString("utf8");
-                }
-            });
+            if (!queries.GET_ALL_SCHEMES) {
+                fs.readFile("queries/GetAllSchemes.sql", function (error, content) {
+                    if (!error) {
+                        queries.GET_ALL_SCHEMES = content.toString("utf8");
+                        next();
+                    } else {
+                        callback(error, null);
+                    }
+                });
+            } else {
+                next();
+            }
         },
         function (next) {
-            fs.readFile("queries/GetAllTables.sql", function (error, content) {
-                if (!error) {
-                    showError(error);
-                    next();
-                } else {
-                    queries.GET_ALL_TABLES = content.toString("utf8");
-                }
-            });
+            if (!queries.GET_ALL_TABLES) {
+                fs.readFile("queries/GetAllTables.sql", function (error, content) {
+                    if (!error) {
+                        queries.GET_ALL_TABLES = content.toString("utf8");
+                        next();
+                    } else {
+                        callback(error, null);
+                    }
+                });
+            } else {
+                next();
+            }
         },
         function () {
             if (typeof callback === "function") {
-                callback();
+                callback(null, queries);
             }
         }
     ]);
@@ -127,8 +135,22 @@ function loadDumpStructure(options, callback) {
     pg.connect(url.format(connection), function (error, client, done) {
         var query,
             views,
-            tables;
+            tables,
+            structure = {},
+            queries;
         deferred([
+            // load queries
+            function (next) {
+                loadQueries(function (error, result) {
+                    if (!error) {
+                        queries = result;
+                        next();
+                    } else {
+                        callback(error, null);
+                    }
+                });
+            },
+            // apply dumps
             function (next) {
                 var actions = [],
                     length = files.length,
@@ -161,6 +183,26 @@ function loadDumpStructure(options, callback) {
                     next();
                 });
                 deferred(actions);
+            },
+            // get all schemes
+            function (next) {
+                client.query(queries.GET_ALL_SCHEMES, function (error, result) {
+                    if (error) {
+                        callback(error, null);
+                    } else {
+                        structure.schemes = [];
+                        result.rows.forEach(function (element) {
+                            structure.schemes.push({
+                                id          : element.id,
+                                name        : element.name,
+                                description : element.description,
+                                labels      : element.labels,   // todo: check it
+                                providers   : element.providers // todo: check it
+                            });
+                        });
+                        next();
+                    }
+                });
             },
             function (next) {
                 client.query(SQL_SELECT_ALL_TABLES, function (error, result) {
