@@ -1,6 +1,7 @@
 -- get all tables
 
-SELECT rel.relname,
+SELECT n.oid AS scheme_id,
+       rel.relname,
        rel.reltablespace AS spcoid,
        spc.spcname,
        pg_get_userbyid(rel.relowner) AS relowner,
@@ -59,6 +60,8 @@ SELECT rel.relname,
       WHERE s2.objoid=rel.oid
         AND s2.objsubid=0) AS providers
   FROM pg_class rel
+  LEFT OUTER JOIN pg_namespace n
+    ON n.oid = rel.relnamespace
   LEFT OUTER JOIN pg_tablespace spc
     ON spc.oid=rel.reltablespace
   LEFT OUTER JOIN pg_description des
@@ -73,5 +76,5 @@ SELECT rel.relname,
   LEFT JOIN pg_type typ
     ON rel.reloftype=typ.oid
  WHERE rel.relkind IN ('r','s','t')
-   AND rel.relnamespace = 2200::oid
+   AND n.nspname IN ('public')
  ORDER BY rel.relname

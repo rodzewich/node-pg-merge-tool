@@ -59,8 +59,6 @@ function loadQueries(callback) {
     ]);
 }
 
-
-
 const SQL_SELECT_ALL_DATABASES =
     "SELECT datname AS database    \n" +
     "  FROM pg_database            \n" +
